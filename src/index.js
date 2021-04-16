@@ -8,6 +8,18 @@ app.use(express.json());
 
 const customers = [];
 
+function getBalance(statement) {
+  const balance = statement.reduce((acc, operation) => {
+    if (operation.type === 'credit') {
+      return acc + operation.amount;
+    } else {
+      return acc - operation.amount;
+    }
+  }, 0)
+
+  return balance;
+}
+
 //Middleware
 function verifyIfCustomerExists(request, response, next) {
   const { cpf } = request.headers;
@@ -50,6 +62,17 @@ app.get('/statement', verifyIfCustomerExists, (request, response) => {
   return response.json(customer.statement);
 });
 
+app.get('/statement/date', verifyIfCustomerExists, (request, response) => {
+  const { customer } = request;
+  const { date } = request.query;
+
+  const dateFormat = new Date(date + " 00:00")
+
+  const statement = customer.statement.filter((statement) => 
+    statement.created_at.toDateString() === date.toDateString()
+  );
+})
+
 app.post('/deposit', verifyIfCustomerExists, (request, response) => {
   const { description, amount } = request.body;
 
@@ -66,6 +89,28 @@ app.post('/deposit', verifyIfCustomerExists, (request, response) => {
 
   return response.status(201).send();
 })
+
+app.post('/withdraw', verifyIfCustomerExists, (request, response) => {
+  const { amount } = request.body;
+  const { customer } = request;
+
+  const balance = getBalance(customer.statement);
+
+  if (balance < amount) {
+    return response.status(400).json({error: "Insufficient funds!"});
+  }
+
+  const statementOperation = {
+    amount,
+    type: "debit",
+    created_at: new Date()
+  }
+
+  customer.statement.push(statementOperation);
+
+  return response.status(201).send();
+})
+
 
 app.listen(3333);
 
